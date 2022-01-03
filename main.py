@@ -30,7 +30,10 @@ def search_for_tracks(plex, m3u_file):
             track = mutagen.File(l)
             search_string = track['title'][0]
         elif l.endswith('mp3'):
-            search_string = EasyID3(l).get('title')[0]
+            try:
+                search_string = EasyID3(l).get('title')[0]
+            except TypeError as e:
+                print(str(e))
 
         if len(search_string) > 0:
             result = get_matching_track(plex, search_string, audio.key, l)
@@ -38,15 +41,20 @@ def search_for_tracks(plex, m3u_file):
                 print('Adding track ' + result.guid)
                 items.append(result)
             else:
-                print('ERROR: Could not find match for ' + l)
+                result = get_matching_track(plex, search_string, audio.key, l, strip_parens=True)
+                if result:
+                    print('Adding track ' + result.guid)
+                    items.append(result)
+                else:
+                    print('ERROR: Could not find match for ' + l)
         else:
             print('DEBUG: Skipping ' + l)
     return items
 
 
-def get_matching_track(plex, search_term, library_id, filename):
+def get_matching_track(plex, search_term, library_id, filename, strip_parens=False):
     try:
-        results = plex.search(query=strip_appenders(search_term), mediatype='track', sectionId=library_id)
+        results = plex.search(query=strip_appenders(search_term, strip_parens), mediatype='track', sectionId=library_id)
         if len(results) == 1:
             return results[0]
         else:
@@ -60,9 +68,9 @@ def get_matching_track(plex, search_term, library_id, filename):
         return None
 
 
-def strip_appenders(full_title: str):
+def strip_appenders(full_title: str, strip_parens=False):
     no_prefix = strip_prefix(full_title)
-    return strip_suffix(no_prefix)
+    return strip_suffix(no_prefix, strip_parens)
 
 
 def strip_prefix(full_title: str):
@@ -70,7 +78,7 @@ def strip_prefix(full_title: str):
     return match[0]
 
 
-def strip_suffix(full_title: str):
+def strip_suffix(full_title: str, strip_parens=False):
     stripped_title = full_title
     start_bracket = stripped_title.find('[')
     if start_bracket > -1:
@@ -80,11 +88,12 @@ def strip_suffix(full_title: str):
     featuring = stripped_title.lower().find('feat.')
     if featuring > -1:
         stripped_title = stripped_title[0:featuring].strip()
-    left_paren = stripped_title.find('(')
-    if left_paren > -1:
-        right_paren = stripped_title.find(')', left_paren)
-        if right_paren > -1:
-            stripped_title = stripped_title[0:left_paren].strip()
+    if strip_parens:
+        left_paren = stripped_title.find('(')
+        if left_paren > -1:
+            right_paren = stripped_title.find(')', left_paren)
+            if right_paren > -1:
+                stripped_title = stripped_title[0:left_paren].strip()
     return stripped_title
 
 
